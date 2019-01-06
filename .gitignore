@@ -1,0 +1,7 @@
+data/model/
+data/test2/
+data/train2/
+**/__pycache__/
+*.doc
+*.csv
+
