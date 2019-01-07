@@ -112,7 +112,7 @@ def main(unused_argv):
   
   # Create the Estimator
   config = tf.estimator.RunConfig(
-                save_checkpoints_steps=300,
+                save_checkpoints_steps=1000,
                 log_step_count_steps=10,
                 save_summary_steps=10,
                 keep_checkpoint_max=10)
@@ -132,7 +132,8 @@ def main(unused_argv):
                 hooks=[logging_hook])
   eval_spec = tf.estimator.EvalSpec(
                 input_fn=lambda: eval_input_fn(FLAGS.EVAL_ANNOTA_PATH, FLAGS.EVAL_BATCH_SIZE),
-                steps=eval_epoch_steps*FLAGS.TRAIN_EPOCH)
+                steps=eval_epoch_steps*FLAGS.TRAIN_EPOCH,
+                throttle_secs=900)
   tf.estimator.train_and_evaluate(
                 classifier,
                 train_spec,

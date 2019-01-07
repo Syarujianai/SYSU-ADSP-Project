@@ -7,6 +7,7 @@ import skimage # hist equalization module
 import pywt # wavelet processing module
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+import cv2
 
 # data_path = os.path.join("data")
 # data_train_path = data_path.join("train")
@@ -26,6 +27,11 @@ def read_aifc(filename):
   with aifc.open(filename, 'r') as s:
     strsig = s.readframes(n_frames)
     data = np.fromstring(strsig, np.short()).byteswap()
+    t = np.arange(0, len(data), 1) / float(2000)
+    plt.plot(t, data, color='black')
+    plt.xlabel('Time (ms)')
+    plt.ylabel('Amplitude')
+    plt.title('Audio signal')
   return np.float64(data)
 
 def normalize_spectr_1(spectrogram):
@@ -56,9 +62,9 @@ def normalize_zero_one(spectrogram):
 # TODO: shuffle func
 '''load data'''
 wave = read_aifc('./data/train2/20090328_000000_236s4ms_TRAIN25_1.aif')
-print(np.ndarray.max(wave))
-print(wave)
-print(wave.shape)
+# print(np.ndarray.max(wave))
+# print(wave)
+# print(wave.shape)
 
 '''stft'''
 f, t, stft_spectr = scipy.signal.stft(wave, fs, window = stft_window, 
@@ -77,36 +83,54 @@ ax.plot_surface(x, y, stft_spectr_magn)
 plt.figure("spectr")
 plt.subplot(131)
 plt.pcolormesh(t, f, stft_spectr_magn) # TODO: np.abs(), vmin=0, vmax=1024
-print(t)
+# print(t)
 plt.title('STFT Magnitude')
 plt.ylabel('Frequency [Hz]')
 plt.xlabel('Time [sec]')
 
-'''wiener filter'''
-plt.subplot(132)
-wienered_spectr = scipy.signal.wiener(stft_spectr_magn, mysize = wiener_wind_size)
-print(wienered_spectr.shape)
-print(np.ndarray.max(np.abs(wienered_spectr)))
-plt.pcolormesh(t, f, wienered_spectr)
-print(wienered_spectr)
-plt.title('Wienered')
-plt.ylabel('Frequency [Hz]')
-plt.xlabel('Time [sec]')
-
 '''normalization'''
-plt.subplot(133)
-normalized_spectr1 = normalize_spectr_1(wienered_spectr)
-plt.pcolormesh(t, f, normalized_spectr1)
+plt.subplot(132)
+normalized_spectr = normalize_spectr_1(stft_spectr_magn)
+plt.pcolormesh(t, f, normalized_spectr)
 plt.title('Normalized')
 plt.ylabel('Frequency [Hz]')
 plt.xlabel('Time [sec]')
 
-hist = skimage.exposure.histogram(normalized_spectr1, nbins=256)
-print(hist)
-plt.figure("spectr_hist")
-spectr_flat = normalized_spectr1.flatten()
+'''wiener filter'''
+plt.subplot(133)
+normalized_spectr1 = scipy.signal.wiener(normalized_spectr, mysize = wiener_wind_size)
+normalized_spectr2 = pywt.threshold(normalized_spectr1, 0.2, 'hard',0)
+# normalized_spectr1 = scipy.signal.wiener(normalized_spectr1, mysize = wiener_wind_size)
+# print(wienered_spectr.shape)
+# print(np.ndarray.max(np.abs(wienered_spectr)))
+plt.pcolormesh(t, f, normalized_spectr1)
+# print(wienered_spectr)
+plt.title('Wienered')
+plt.ylabel('Frequency [Hz]')
+plt.xlabel('Time [sec]')
+
+# plot
+fig = plt.figure('3d_norm')
+ax2 = fig.add_subplot(111, projection='3d')
+ax2.plot_surface(x, y, normalized_spectr)
+
+fig = plt.figure('3d_threshold')
+ax2 = fig.add_subplot(111, projection='3d')
+ax2.plot_surface(x, y, normalized_spectr2)
+
+fig = plt.figure('3d_wiener')
+ax2 = fig.add_subplot(111, projection='3d')
+ax2.plot_surface(x, y, normalized_spectr1)
+
+plt.figure("spectr__norm_hist")
+spectr_flat = normalized_spectr.flatten()
 n, bins, patches = plt.hist(spectr_flat, bins=256, density=1,edgecolor='None',facecolor='red') 
 print('max:', np.max(np.abs(spectr_flat)), 'std: ', spectr_flat.std())
+
+
+
+# hist = skimage.exposure.histogram(normalized_spectr1, nbins=256)
+# print(hist)
 
 '''equalization'''
 plt.figure("equalization")
@@ -125,33 +149,67 @@ plt.title('Equalized')
 plt.ylabel('Frequency [Hz]')
 plt.xlabel('Time [sec]')
 
-fig = plt.figure('3d2')
-ax2 = fig.add_subplot(111, projection='3d')
-ax2.plot_surface(x, y, normalized_spectr1)
 
 '''wavelet'''
+# normalized_spectr1 = scipy.signal.medfilt(normalized_spectr1,(5,5))
 titles = ['Approximation', ' Horizontal detail',
           'Vertical detail', 'Diagonal detail']
 coeffs2 = pywt.dwt2(normalized_spectr1, 'haar')
 LL, (LH, HL, HH) = coeffs2
-# print('wave: ', np.max(LL), LL.std())
+print('wave: ', LL.max(), LH.max(), HL.max(), HH.max())
+plt.figure('wavelet_hist')
+plt.subplot(141)
+n, bins, patches = plt.hist(LL.flatten(), bins=256, density=1,edgecolor='None',facecolor='red')
+plt.title('LL')
+plt.subplot(142)
+n, bins, patches = plt.hist(LH.flatten(), bins=256, density=1,edgecolor='None',facecolor='red')
+plt.title('LH')
+plt.subplot(143)
+n, bins, patches = plt.hist(HL.flatten(), bins=256, density=1,edgecolor='None',facecolor='red')
+plt.title('HL')
+plt.subplot(144)
+n, bins, patches = plt.hist(HH.flatten(), bins=256, density=1,edgecolor='None',facecolor='red')
+plt.title('HH')
+
 fig = plt.figure('wavelet')
 for i, a in enumerate([LL, LH, HL, HH]):
   ax = fig.add_subplot(1, 4, i + 1)
-  ax.imshow(a, interpolation="nearest", cmap=plt.cm.gray)
+  ax.imshow(a, interpolation="nearest")
   ax.set_title(titles[i], fontsize=10)
   ax.set_xticks([])
   ax.set_yticks([])
 
-LH_eq = skimage.exposure.equalize_hist(LH)
-HL_eq = skimage.exposure.equalize_hist(HL)
+plt.figure('wavelet_hist_equalized')
+# LL_eq = skimage.exposure.equalize_adapthist(LL)
+LH_eq = skimage.exposure.equalize_adapthist(LH)
+HL_eq = skimage.exposure.equalize_adapthist(HL)
+HH_eq = skimage.exposure.equalize_hist(HH)
 
-spectr_eq2 = pywt.idwt2((LL, (LH_eq, HL_eq, HH)), 'haar')
+print('wave: ', LH_eq.max(), HL_eq.max())
+plt.subplot(141)
+# n, bins, patches = plt.hist(LL_eq.flatten(), bins=256, density=1,edgecolor='None',facecolor='red')
+plt.title('LL_eq')
+plt.subplot(142)
+n, bins, patches = plt.hist(LH_eq.flatten(), bins=256, density=1,edgecolor='None',facecolor='red')
+plt.title('LH_eq')
+plt.subplot(143)
+n, bins, patches = plt.hist(HL_eq.flatten(), bins=256, density=1,edgecolor='None',facecolor='red')
+plt.title('HL_eq')
+plt.subplot(144)
+n, bins, patches = plt.hist(HH_eq.flatten(), bins=256, density=1,edgecolor='None',facecolor='red')
+plt.title('HH_eq')
+
+LL_m = scipy.signal.medfilt(LL,(5,5))
+LL_pr = skimage.exposure.equalize_adapthist(
+                normalize_spectr_1(LL_m))
+
+spectr_eq2 = pywt.idwt2((LL_pr, (LH, HL, HH)), 'haar')
+LL_rz = skimage.transform.resize(LL_pr, [129,33])
+
 fig = plt.figure('3d3')
 ax2 = fig.add_subplot(111, projection='3d')
 ax2.plot_surface(x, y, normalized_spectr1)
 
-print(np.shape(spectr_eq2[:-1,:-1]))
 plt.figure('eq')
 plt.subplot(121)
 plt.pcolormesh(t, f, spectr_eq2[:-1,:-1])
@@ -159,7 +217,12 @@ plt.title('Equalized')
 plt.ylabel('Frequency [Hz]')
 plt.xlabel('Time [sec]')
 plt.subplot(122)
-spectr_eq2_flat = spectr_eq2.flatten()
-n, bins, patches = plt.hist(spectr_eq2_flat, bins=256, density=1,edgecolor='None',facecolor='red') 
+n, bins, patches = plt.hist(spectr_eq2.flatten(), bins=256, density=1,edgecolor='None',facecolor='red') 
+
+plt.figure('LL_rz')
+plt.pcolormesh(t, f, LL_rz)
+plt.title('Equalized')
+plt.ylabel('Frequency [Hz]')
+plt.xlabel('Time [sec]')
 
 plt.show()

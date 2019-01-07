@@ -7,6 +7,7 @@ import skimage # hist equalization module
 import pywt # wavelet processing module
 import tensorflow as tf
 import multiprocessing as mt
+import cv2
 
 # Testing
 # from train import FLAGS
@@ -72,19 +73,18 @@ def _read_and_preprocess(filename, label):
                         wave, FS, window=STFT_WIN_TYPE, 
                         nperseg=N_PERSEG, noverlap=N_OVERLAP)                        
   stft_spectr_magn = np.abs(stft_spectr)
-  # wiener filter
-  wienered_spectr = scipy.signal.wiener(stft_spectr_magn, mysize=WIENER_WIN_SIZE)
   # normalization
-  normalized_spectr = _normalize_spectr_1(wienered_spectr)
+  normalized_spectr = _normalize_spectr_1(stft_spectr_magn)
+  # wiener filter
+  wienered_spectr = scipy.signal.wiener(normalized_spectr, mysize=WIENER_WIN_SIZE)
   # equalization
-  spectr_equalized = skimage.exposure.equalize_adapthist(normalized_spectr)
-  # wavelet
-  # coeffs2 = pywt.dwt2(normalized_spectr1, 'haar')
-  # LL, (LH, HL, HH) = coeffs2
-  # LH_eq = skimage.exposure.equalize_hist(LH)
-  # HL_eq = skimage.exposure.equalize_hist(HL)
-  # spectr_eq2 = pywt.idwt2((LL, (LH_eq, HL_eq, HH)), 'haar')
-  spectr_resized = skimage.transform.resize(spectr_equalized, [129,33])
+  # spectr_equalized = skimage.exposure.equalize_adapthist(normalized_spectr)
+  # wavelet soft threshold filter
+  soft_spectr = pywt.threshold(wienered_spectr, 0.15, 'hard',0)
+  # spectr_resized = skimage.transform.resize(spectr_equalized, [129,33])
+  # cv.resize() faster than skimage.transform.resize()?
+  spectr_resized = cv2.resize(soft_spectr, (129,33), interpolation=cv2.INTER_LINEAR)
+  
   return spectr_resized, label
 
 
